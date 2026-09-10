@@ -5,23 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>팅턴 게임판</title>
 <script src="https://unpkg.com/lucide@latest"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
-  <script>
-    const firebaseConfig = {
-      apiKey: "AIzaSyBTfNwe0ia9CN9gFCq2_G39Hea8aS9K9Nk",
-      authDomain: "tingtongame.firebaseapp.com",
-      databaseURL: "https://tingtongame-default-rtdb.firebaseio.com",
-      projectId: "tingtongame",
-      storageBucket: "tingtongame.firebasestorage.app",
-      messagingSenderId: "322367917053",
-      appId: "1:322367917053:web:d60ab1929672d2aec2a794",
-      measurementId: "G-ECY6S8PH6C"
-    };
-    firebase.initializeApp(firebaseConfig);
-    const firebaseDB = firebase.database();
-  </script>
-
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap');
 *{box-sizing:border-box}
@@ -159,6 +142,24 @@ button{cursor:pointer}
 <body>
 
 <div id="app"></div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
+import { getDatabase, ref, get, set, onValue } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-database.js";
+const firebaseConfig = {
+  apiKey: "AIzaSyBTfNwe0ia9CN9gFCq2_G39Hea8aS9K9Nk",
+  authDomain: "tingtongame.firebaseapp.com",
+  databaseURL: "https://tingtongame-default-rtdb.firebaseio.com",
+  projectId: "tingtongame",
+  storageBucket: "tingtongame.firebasestorage.app",
+  messagingSenderId: "322367917053",
+  appId: "1:322367917053:web:d60ab1929672d2aec2a794",
+  measurementId: "G-ECY6S8PH6C"
+};
+const firebaseApp = initializeApp(firebaseConfig);
+const firebaseDB = getDatabase(firebaseApp);
+window.tingtonFirebase = { firebaseDB, ref, get, set, onValue };
+</script>
 <script>
 const GREEN="#1B5E45", GREEN_DARK="#123B2D", AMBER="#E8A33D", INK="#16231F", MUTED="#7C8B84";
 const TIER_OPTIONS=["S","A","B","C","D","초심","왕초심"];
@@ -184,19 +185,32 @@ function combinations(arr,k){
 function formatElapsed(ms){const total=Math.max(0,Math.floor(ms/1000));const m=Math.floor(total/60),s=total%60;return `${m}:${String(s).padStart(2,"0")}`}
 function initCourts(n){return Array.from({length:n},(_,i)=>({id:i+1,playerIds:[],startTime:null,gameCount:0,nextPlayerIds:[]}))}
 async function save(){
-  if(!loaded)return;
-  try{
-    await firebaseDB.ref("badminton_v1").set({
-      players,
-      courts,
-      overlap,
-      members,
-      waitingGroups
-    });
-  }catch(e){
-    console.error("Firebase 저장 실패:",e);
-    alert("게임판 저장에 실패했습니다. Firebase 연결 상태를 확인해주세요.");
-  }
+ if(!loaded || !window.tingtonFirebase)return;
+ const fb=window.tingtonFirebase;
+ try{
+  await fb.set(fb.ref(fb.firebaseDB,"badminton_v1"),{players,courts,overlap,members,waitingGroups});
+ }catch(e){
+  console.error("Firebase 저장 실패:",e);
+ }
+}
+function esc(s){return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]))}
+function player(id){return players.find(p=>p.id===id)}
+function genderColor(p){return p&&GENDER_COLOR[p.gender]||INK}
+function tierBadge(p,small=false){return `<span class="${small?"tierBadgeSm":"tierBadge"}" style="color:${TIER_COLOR[p.tier]||MUTED}">${esc(p.tier)}</span>`}
+function statusBadge(s){return `<span class="badge ${s}">${STATUS_LABEL[s]}</span>`}
+function icon(name,size=14){return `<i data-lucide="${name}" width="${size}" height="${size}"></i>`}
+
+function addPlayer(){
+ const name=newName.trim(); if(!name)return;
+ if(isGuest&&!guestOf){alert("게스트를 데려온 회원을 선택해주세요.");return}
+ let memberId=null;
+ if(saveToRoster&&!isGuest){
+  const existing=members.find(m=>m.name===name);
+  if(existing){memberId=existing.id}
+  else{const m={id:memberNextId++,name,tier:newTier,gender:newGender};members.push(m);memberId=m.id}
+ }
+ const p={id:nextId++,name,tier:newTier,gender:newGender,guestOf:isGuest?guestOf:null,memberId,games:0,status:"waiting",courtId:null,waitSince:Date.now()};
+ players.push(p);newName="";isGuest=false;guestOf="";save();render();
 }
 function removePlayer(id){players=players.filter(p=>p.id!==id);save();render()}
 function clearAllPlayers(){
@@ -500,45 +514,44 @@ function renderStats(){
 }
 
 
-// 관리자 잠금: 정적 사이트에서 사용할 수 있는 간단한 접근 잠금입니다.
-// 비밀번호를 바꾸려면 아래 ADMIN_PASSWORD 값만 수정하면 됩니다.
-function load(){
-  try{
-    const snap=await firebaseDB.ref("badminton_v1").get();
-    if(snap.exists()){
-      const d=snap.val()||{};
-      players=Array.isArray(d.players)?d.players:Object.values(d.players||{});
-      courts=Array.isArray(d.courts)&&d.courts.length?d.courts:initCourts(2);
-      overlap=d.overlap||{};
-      members=Array.isArray(d.members)?d.members:Object.values(d.members||{});
-      waitingGroups=Array.isArray(d.waitingGroups)?d.waitingGroups:Object.values(d.waitingGroups||{});
-      nextId=players.reduce((m,p)=>Math.max(m,Number(p.id)||0),0)+1;
-      memberNextId=members.reduce((m,x)=>Math.max(m,Number(x.id)||0),0)+1;
-      groupNextId=waitingGroups.reduce((m,x)=>Math.max(m,Number(x.id)||0),0)+1;
-    }
-    loaded=true;
-    render();
 
-    firebaseDB.ref("badminton_v1").on("value", snap=>{
-      if(!snap.exists())return;
-      const d=snap.val()||{};
-      players=Array.isArray(d.players)?d.players:Object.values(d.players||{});
-      courts=Array.isArray(d.courts)&&d.courts.length?d.courts:initCourts(2);
-      overlap=d.overlap||{};
-      members=Array.isArray(d.members)?d.members:Object.values(d.members||{});
-      waitingGroups=Array.isArray(d.waitingGroups)?d.waitingGroups:Object.values(d.waitingGroups||{});
-      nextId=players.reduce((m,p)=>Math.max(m,Number(p.id)||0),0)+1;
-      memberNextId=members.reduce((m,x)=>Math.max(m,Number(x.id)||0),0)+1;
-      groupNextId=waitingGroups.reduce((m,x)=>Math.max(m,Number(x.id)||0),0)+1;
-      loaded=true;
-      render();
-    });
-  }catch(e){
-    console.error("Firebase 불러오기 실패:",e);
-    loaded=true;
-    render();
-    alert("Firebase에서 게임판을 불러오지 못했습니다. Firebase Database 규칙을 확인해주세요.");
+async function load(){
+ try{
+  const fb=window.tingtonFirebase;
+  const gameRef=fb.ref(fb.firebaseDB,"badminton_v1");
+  const snap=await fb.get(gameRef);
+  if(snap.exists()){
+   const d=snap.val()||{};
+   players=Array.isArray(d.players)?d.players:[];
+   courts=Array.isArray(d.courts)&&d.courts.length?d.courts:initCourts(2);
+   overlap=d.overlap||{};
+   members=Array.isArray(d.members)?d.members:[];
+   waitingGroups=Array.isArray(d.waitingGroups)?d.waitingGroups:[];
+   nextId=players.reduce((m,p)=>Math.max(m,Number(p.id)||0),0)+1;
+   memberNextId=members.reduce((m,x)=>Math.max(m,Number(x.id)||0),0)+1;
+   groupNextId=waitingGroups.reduce((m,x)=>Math.max(m,Number(x.id)||0),0)+1;
   }
+  loaded=true;
+  render();
+  fb.onValue(gameRef,(snap)=>{
+   if(!snap.exists())return;
+   const d=snap.val()||{};
+   players=Array.isArray(d.players)?d.players:[];
+   courts=Array.isArray(d.courts)&&d.courts.length?d.courts:initCourts(2);
+   overlap=d.overlap||{};
+   members=Array.isArray(d.members)?d.members:[];
+   waitingGroups=Array.isArray(d.waitingGroups)?d.waitingGroups:[];
+   nextId=players.reduce((m,p)=>Math.max(m,Number(p.id)||0),0)+1;
+   memberNextId=members.reduce((m,x)=>Math.max(m,Number(x.id)||0),0)+1;
+   groupNextId=waitingGroups.reduce((m,x)=>Math.max(m,Number(x.id)||0),0)+1;
+   loaded=true;
+   render();
+  });
+ }catch(e){
+  console.error("Firebase 불러오기 실패:",e);
+  loaded=true;
+  render();
+ }
 }
 setInterval(()=>{
  document.querySelectorAll("[data-court-timer]").forEach(el=>{
