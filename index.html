@@ -158,34 +158,6 @@ button{cursor:pointer}
 </head>
 <body>
 
-<style id="admin-login-style">
-#adminLock{display:none!important;position:fixed;inset:0;background:#F4F6F3;z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px}
-#adminLock.hidden{display:none}
-.adminLoginCard{width:min(380px,100%);background:#fff;border:1px solid #E1E7E2;border-radius:16px;padding:28px;box-shadow:0 10px 30px rgba(20,40,30,.08);text-align:center}
-.adminLoginIcon{width:52px;height:52px;border-radius:12px;background:#1B5E45;margin:0 auto 14px;display:flex;align-items:center;justify-content:center;font-size:24px}
-.adminLoginTitle{font-family:'Space Grotesk',sans-serif;font-size:20px;font-weight:700;margin-bottom:6px}
-.adminLoginSub{font-size:12.5px;color:#7C8B84;margin-bottom:20px}
-.adminLoginForm{display:flex;flex-direction:column;gap:9px}
-.adminLoginInput{width:100%;border:1px solid #E1E7E2;border-radius:9px;padding:11px 12px;font-size:13.5px;outline:none}
-.adminLoginBtn{width:100%;border:none;border-radius:9px;padding:11px;background:#1B5E45;color:#fff;font-size:13px;font-weight:700}
-.adminLoginError{min-height:16px;font-size:11.5px;color:#C24A3B;margin-top:3px}
-.adminLogout{position:fixed;right:18px;bottom:18px;z-index:9990;background:#fff;border:1px solid #E1E7E2;border-radius:8px;padding:7px 10px;color:#7C8B84;font-size:11px}
-</style>
-
-<div id="adminLock">
-  <div class="adminLoginCard">
-    <div class="adminLoginIcon">🏸</div>
-    <div class="adminLoginTitle">팅턴 게임판</div>
-    <div class="adminLoginSub">관리자 비밀번호를 입력해주세요.</div>
-    <form class="adminLoginForm" onsubmit="return adminLogin(event)">
-      <input id="adminPasswordInput" class="adminLoginInput" type="password" placeholder="관리자 비밀번호" autocomplete="current-password">
-      <button class="adminLoginBtn" type="submit">입장하기</button>
-      <div id="adminLoginError" class="adminLoginError"></div>
-    </form>
-  </div>
-</div>
-<button id="adminLogoutBtn" class="adminLogout" onclick="adminLogout()" style="display:none">관리자 잠금</button>
-
 <div id="app"></div>
 <script>
 const GREEN="#1B5E45", GREEN_DARK="#123B2D", AMBER="#E8A33D", INK="#16231F", MUTED="#7C8B84";
@@ -530,38 +502,7 @@ function renderStats(){
 
 // 관리자 잠금: 정적 사이트에서 사용할 수 있는 간단한 접근 잠금입니다.
 // 비밀번호를 바꾸려면 아래 ADMIN_PASSWORD 값만 수정하면 됩니다.
-const ADMIN_PASSWORD = "0000";
-const ADMIN_SESSION_KEY = "tington_admin_unlocked";
-
-function showAdminLogin(){
-  const lock=document.getElementById("adminLock");
-  const logout=document.getElementById("adminLogoutBtn");
-  if(lock) lock.classList.remove("hidden");
-  if(logout) logout.style.display="none";
-  setTimeout(()=>document.getElementById("adminPasswordInput")?.focus(),50);
-}
-function adminLogin(e){
-  e.preventDefault();
-  const input=document.getElementById("adminPasswordInput");
-  const error=document.getElementById("adminLoginError");
-  if(input?.value===ADMIN_PASSWORD){
-    sessionStorage.setItem(ADMIN_SESSION_KEY,"1");
-    document.getElementById("adminLock")?.classList.add("hidden");
-    if(document.getElementById("adminLogoutBtn")) document.getElementById("adminLogoutBtn").style.display="block";
-    if(error) error.textContent="";
-    load();
-  }else{
-    if(error) error.textContent="비밀번호가 올바르지 않습니다.";
-    if(input){input.value="";input.focus();}
-  }
-  return false;
-}
-function adminLogout(){
-  sessionStorage.removeItem(ADMIN_SESSION_KEY);
-  showAdminLogin();
-}
-
-async function load(){
+function load(){
   try{
     const snap=await firebaseDB.ref("badminton_v1").get();
     if(snap.exists()){
@@ -605,8 +546,6 @@ setInterval(()=>{
   if(c?.startTime)el.textContent=formatElapsed(Date.now()-c.startTime);
  });
 },1000);
-// 비밀번호 없이 바로 게임판을 표시합니다.
-document.getElementById("adminLock")?.classList.add("hidden");
 load();
 </script>
 </body>
