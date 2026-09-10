@@ -5,18 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>팅턴 게임판</title>
 <script src="https://unpkg.com/lucide@latest"></script>
-
-  <!-- Firebase Realtime Database -->
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-    import {
-      getDatabase,
-      ref,
-      get,
-      set,
-      onValue
-    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
-
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+  <script>
     const firebaseConfig = {
       apiKey: "AIzaSyBTfNwe0ia9CN9gFCq2_G39Hea8aS9K9Nk",
       authDomain: "tingtongame.firebaseapp.com",
@@ -27,11 +18,8 @@
       appId: "1:322367917053:web:d60ab1929672d2aec2a794",
       measurementId: "G-ECY6S8PH6C"
     };
-
-    const firebaseApp = initializeApp(firebaseConfig);
-    const firebaseDB = getDatabase(firebaseApp);
-
-    window.tingtonFirebase = { firebaseDB, ref, get, set, onValue };
+    firebase.initializeApp(firebaseConfig);
+    const firebaseDB = firebase.database();
   </script>
 
 <style>
@@ -171,7 +159,7 @@ button{cursor:pointer}
 <body>
 
 <style id="admin-login-style">
-#adminLock{position:fixed;inset:0;background:#F4F6F3;z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px}
+#adminLock{display:none!important;position:fixed;inset:0;background:#F4F6F3;z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px}
 #adminLock.hidden{display:none}
 .adminLoginCard{width:min(380px,100%);background:#fff;border:1px solid #E1E7E2;border-radius:16px;padding:28px;box-shadow:0 10px 30px rgba(20,40,30,.08);text-align:center}
 .adminLoginIcon{width:52px;height:52px;border-radius:12px;background:#1B5E45;margin:0 auto 14px;display:flex;align-items:center;justify-content:center;font-size:24px}
@@ -224,44 +212,19 @@ function combinations(arr,k){
 function formatElapsed(ms){const total=Math.max(0,Math.floor(ms/1000));const m=Math.floor(total/60),s=total%60;return `${m}:${String(s).padStart(2,"0")}`}
 function initCourts(n){return Array.from({length:n},(_,i)=>({id:i+1,playerIds:[],startTime:null,gameCount:0,nextPlayerIds:[]}))}
 async function save(){
-  if(!loaded || !window.tingtonFirebase)return;
-
-  const data = {
-    players,
-    courts,
-    overlap,
-    members,
-    waitingGroups
-  };
-
+  if(!loaded)return;
   try{
-    await window.tingtonFirebase.set(
-      window.tingtonFirebase.ref(window.tingtonFirebase.firebaseDB, "badminton_v1"),
-      data
-    );
+    await firebaseDB.ref("badminton_v1").set({
+      players,
+      courts,
+      overlap,
+      members,
+      waitingGroups
+    });
   }catch(e){
     console.error("Firebase 저장 실패:",e);
     alert("게임판 저장에 실패했습니다. Firebase 연결 상태를 확인해주세요.");
   }
-}));localStorage.setItem("badminton_v1_overlap",JSON.stringify(overlap));localStorage.setItem("badminton_v1_members",JSON.stringify(members));localStorage.setItem("badminton_v1_groups",JSON.stringify(waitingGroups))}
-function esc(s){return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]))}
-function player(id){return players.find(p=>p.id===id)}
-function genderColor(p){return p&&GENDER_COLOR[p.gender]||INK}
-function tierBadge(p,small=false){return `<span class="${small?"tierBadgeSm":"tierBadge"}" style="color:${TIER_COLOR[p.tier]||MUTED}">${esc(p.tier)}</span>`}
-function statusBadge(s){return `<span class="badge ${s}">${STATUS_LABEL[s]}</span>`}
-function icon(name,size=14){return `<i data-lucide="${name}" width="${size}" height="${size}"></i>`}
-
-function addPlayer(){
- const name=newName.trim(); if(!name)return;
- if(isGuest&&!guestOf){alert("게스트를 데려온 회원을 선택해주세요.");return}
- let memberId=null;
- if(saveToRoster&&!isGuest){
-  const existing=members.find(m=>m.name===name);
-  if(existing){memberId=existing.id}
-  else{const m={id:memberNextId++,name,tier:newTier,gender:newGender};members.push(m);memberId=m.id}
- }
- const p={id:nextId++,name,tier:newTier,gender:newGender,guestOf:isGuest?guestOf:null,memberId,games:0,status:"waiting",courtId:null,waitSince:Date.now()};
- players.push(p);newName="";isGuest=false;guestOf="";save();render();
 }
 function removePlayer(id){players=players.filter(p=>p.id!==id);save();render()}
 function clearAllPlayers(){
@@ -600,52 +563,40 @@ function adminLogout(){
 
 async function load(){
   try{
-    const fb = window.tingtonFirebase;
-    const gameRef = fb.ref(fb.firebaseDB, "badminton_v1");
-    const snapshot = await fb.get(gameRef);
-
-    if(snapshot.exists()){
-      const d = snapshot.val() || {};
-
-      players = Array.isArray(d.players) ? d.players : [];
-      courts = Array.isArray(d.courts) && d.courts.length ? d.courts : initCourts(2);
-      overlap = d.overlap || {};
-      members = Array.isArray(d.members) ? d.members : [];
-      waitingGroups = Array.isArray(d.waitingGroups) ? d.waitingGroups : [];
-
-      nextId = players.reduce((m,p)=>Math.max(m, Number(p.id)||0),0)+1;
-      memberNextId = members.reduce((m,x)=>Math.max(m, Number(x.id)||0),0)+1;
-      groupNextId = waitingGroups.reduce((m,x)=>Math.max(m, Number(x.id)||0),0)+1;
+    const snap=await firebaseDB.ref("badminton_v1").get();
+    if(snap.exists()){
+      const d=snap.val()||{};
+      players=Array.isArray(d.players)?d.players:Object.values(d.players||{});
+      courts=Array.isArray(d.courts)&&d.courts.length?d.courts:initCourts(2);
+      overlap=d.overlap||{};
+      members=Array.isArray(d.members)?d.members:Object.values(d.members||{});
+      waitingGroups=Array.isArray(d.waitingGroups)?d.waitingGroups:Object.values(d.waitingGroups||{});
+      nextId=players.reduce((m,p)=>Math.max(m,Number(p.id)||0),0)+1;
+      memberNextId=members.reduce((m,x)=>Math.max(m,Number(x.id)||0),0)+1;
+      groupNextId=waitingGroups.reduce((m,x)=>Math.max(m,Number(x.id)||0),0)+1;
     }
-
-    loaded = true;
+    loaded=true;
     render();
 
-    // 다른 사람이 변경한 내용도 실시간으로 반영
-    fb.onValue(gameRef, (snapshot)=>{
-      if(!snapshot.exists()) return;
-
-      const d = snapshot.val() || {};
-
-      players = Array.isArray(d.players) ? d.players : [];
-      courts = Array.isArray(d.courts) && d.courts.length ? d.courts : initCourts(2);
-      overlap = d.overlap || {};
-      members = Array.isArray(d.members) ? d.members : [];
-      waitingGroups = Array.isArray(d.waitingGroups) ? d.waitingGroups : [];
-
-      nextId = players.reduce((m,p)=>Math.max(m, Number(p.id)||0),0)+1;
-      memberNextId = members.reduce((m,x)=>Math.max(m, Number(x.id)||0),0)+1;
-      groupNextId = waitingGroups.reduce((m,x)=>Math.max(m, Number(x.id)||0),0)+1;
-
-      loaded = true;
+    firebaseDB.ref("badminton_v1").on("value", snap=>{
+      if(!snap.exists())return;
+      const d=snap.val()||{};
+      players=Array.isArray(d.players)?d.players:Object.values(d.players||{});
+      courts=Array.isArray(d.courts)&&d.courts.length?d.courts:initCourts(2);
+      overlap=d.overlap||{};
+      members=Array.isArray(d.members)?d.members:Object.values(d.members||{});
+      waitingGroups=Array.isArray(d.waitingGroups)?d.waitingGroups:Object.values(d.waitingGroups||{});
+      nextId=players.reduce((m,p)=>Math.max(m,Number(p.id)||0),0)+1;
+      memberNextId=members.reduce((m,x)=>Math.max(m,Number(x.id)||0),0)+1;
+      groupNextId=waitingGroups.reduce((m,x)=>Math.max(m,Number(x.id)||0),0)+1;
+      loaded=true;
       render();
     });
-
   }catch(e){
     console.error("Firebase 불러오기 실패:",e);
-    loaded = true;
+    loaded=true;
     render();
-    alert("Firebase에서 게임판을 불러오지 못했습니다. Firebase 설정과 Database 규칙을 확인해주세요.");
+    alert("Firebase에서 게임판을 불러오지 못했습니다. Firebase Database 규칙을 확인해주세요.");
   }
 }
 setInterval(()=>{
@@ -654,13 +605,9 @@ setInterval(()=>{
   if(c?.startTime)el.textContent=formatElapsed(Date.now()-c.startTime);
  });
 },1000);
-if(sessionStorage.getItem(ADMIN_SESSION_KEY)==="1"){
-  document.getElementById("adminLock")?.classList.add("hidden");
-  document.getElementById("adminLogoutBtn").style.display="block";
-  load();
-}else{
-  showAdminLogin();
-}
+// 비밀번호 없이 바로 게임판을 표시합니다.
+document.getElementById("adminLock")?.classList.add("hidden");
+load();
 </script>
 </body>
 </html>
