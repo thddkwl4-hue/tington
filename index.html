@@ -5,6 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>팅턴 게임판</title>
 <script src="https://unpkg.com/lucide@latest"></script>
+
+<!-- Firebase SDK 추가 -->
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
+
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap');
 *{box-sizing:border-box}
@@ -48,7 +53,7 @@ button{cursor:pointer}
 .nextPreviewCount{color:#7C8B84;font-family:'IBM Plex Mono',monospace;font-size:10.5px}
 .nextPreviewActions{margin-top:4px;display:flex;gap:10px;justify-content:center}
 .nextEditBtn{border:none;background:transparent;color:#1B5E45;font-size:11px;font-weight:600}
-.nextReserveBtn{width:100%;margin-top:12px;background:transparent;color:#B08900;border:1px dashed #E8C27A;border-radius:9px;padding:8px 0;font-weight:600;font-size:12px}
+.nextReserveBtn{width:100%;margin-top:12px;background:transparent;color:#B08900;border:1px dashed #E8C27A;border-radius:99px;padding:8px 0;font-weight:600;font-size:12px}
 .emptyCourt{display:flex;flex-direction:column;align-items:center;justify-content:center;height:150px;gap:10px}
 .emptyCourtLine{width:60%;height:1px;background:#E1E7E2}
 .emptyText{font-size:12.5px;color:#7C8B84}
@@ -149,7 +154,7 @@ button{cursor:pointer}
 .adminLoginTitle{font-family:'Space Grotesk',sans-serif;font-size:20px;font-weight:700;margin-bottom:6px}
 .adminLoginSub{font-size:12.5px;color:#7C8B84;margin-bottom:20px}
 .adminLoginForm{display:flex;flex-direction:column;gap:9px}
-.adminLoginInput{width:100%;border:1px solid #E1E7E2;border-radius:9px;padding:11px 12px;font-size:13.5px;outline:none}
+.adminLoginInput{width:100%;border:1px solid #E1E7E2;border-radius:99px;padding:11px 12px;font-size:13.5px;outline:none}
 .adminLoginBtn{width:100%;border:none;border-radius:9px;padding:11px;background:#1B5E45;color:#fff;font-size:13px;font-weight:700}
 .adminLoginError{min-height:16px;font-size:11.5px;color:#C24A3B;margin-top:3px}
 .adminLogout{position:fixed;right:18px;bottom:18px;z-index:9990;background:#fff;border:1px solid #E1E7E2;border-radius:8px;padding:7px 10px;color:#7C8B84;font-size:11px}
@@ -170,7 +175,30 @@ button{cursor:pointer}
 <button id="adminLogoutBtn" class="adminLogout" onclick="adminLogout()" style="display:none">관리자 잠금</button>
 
 <div id="app"></div>
+
 <script>
+// ==========================================
+// 1. FIREBASE 설정 (본인의 키 정보로 수정)
+// ==========================================
+const firebaseConfig = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+  databaseURL: "https://YOUR_PROJECT_ID-default-rtdb.firebaseio.com",
+  projectId: "YOUR_PROJECT_ID",
+  storageBucket: "YOUR_PROJECT_ID.appspot.com",
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId: "YOUR_APP_ID"
+};
+
+// Firebase 초기화
+if (!firebase.apps.length) {
+  firebase.initializeApp(firebaseConfig);
+}
+const db = firebase.database();
+
+// ==========================================
+// 2. 앱 기본 설정 & 변수
+// ==========================================
 const GREEN="#1B5E45", GREEN_DARK="#123B2D", AMBER="#E8A33D", INK="#16231F", MUTED="#7C8B84";
 const TIER_OPTIONS=["S","A","B","C","D","초심","왕초심"];
 const TIER_COLOR={S:"#C24A3B",A:"#C2683B",B:"#B08900",C:"#1B5E45",D:"#3B6FA0","초심":"#7C8B84","왕초심":"#9A8B7C"};
@@ -194,7 +222,30 @@ function combinations(arr,k){
 }
 function formatElapsed(ms){const total=Math.max(0,Math.floor(ms/1000));const m=Math.floor(total/60),s=total%60;return `${m}:${String(s).padStart(2,"0")}`}
 function initCourts(n){return Array.from({length:n},(_,i)=>({id:i+1,playerIds:[],startTime:null,gameCount:0,nextPlayerIds:[]}))}
-function save(){if(!loaded)return;localStorage.setItem("badminton_v1",JSON.stringify({players,courts}));localStorage.setItem("badminton_v1_overlap",JSON.stringify(overlap));localStorage.setItem("badminton_v1_members",JSON.stringify(members));localStorage.setItem("badminton_v1_groups",JSON.stringify(waitingGroups))}
+
+// ==========================================
+// 3. FIREBASE 저장 및 동기화 로직
+// ==========================================
+function save(){
+  if(!loaded) return;
+  const payload = {
+    players: players || [],
+    courts: courts || [],
+    overlap: overlap || {},
+    members: members || [],
+    waitingGroups: waitingGroups || []
+  };
+  
+  // 로컬 스토리지 백업 저장
+  localStorage.setItem("badminton_v1", JSON.stringify({players, courts}));
+  localStorage.setItem("badminton_v1_overlap", JSON.stringify(overlap));
+  localStorage.setItem("badminton_v1_members", JSON.stringify(members));
+  localStorage.setItem("badminton_v1_groups", JSON.stringify(waitingGroups));
+
+  // Firebase 실시간 DB 저장
+  db.ref("badminton_v1").set(payload);
+}
+
 function esc(s){return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]))}
 function player(id){return players.find(p=>p.id===id)}
 function genderColor(p){return p&&GENDER_COLOR[p.gender]||INK}
@@ -515,9 +566,9 @@ function renderStats(){
  <div class="playerTable">${overlapView==="summary"?(by.length?by.map(r=>`<div class="overlapSummaryRow"><div class="overlapSummaryName" style="color:${genderColor(r.player)}">${esc(r.player.name)}</div><div class="overlapPartnerList">${r.related.map(rel=>`<span class="overlapPartnerChip ${rel.count>=3?"high":""}">${esc(rel.partner.name)} ${rel.count}번</span>`).join("")}</div></div>`).join(""):'<div class="emptyNote">아직 기록이 없어요.</div>'):(rank.length?rank.map(r=>`<div class="overlapRow"><span><span style="color:${genderColor(r.a)};font-weight:600">${esc(r.a.name)}</span> ${icon("chevron-right",12)} <span style="color:${genderColor(r.b)};font-weight:600">${esc(r.b.name)}</span></span><span class="overlapCount" style="${r.count>=3?'color:#C24A3B':''}">${r.count}번</span></div>`).join(""):'<div class="emptyNote">아직 기록이 없어요.</div>')}</div></div></div>`
 }
 
-
-// 관리자 잠금: 정적 사이트에서 사용할 수 있는 간단한 접근 잠금입니다.
-// 비밀번호를 바꾸려면 아래 ADMIN_PASSWORD 값만 수정하면 됩니다.
+// ==========================================
+// 4. 관리자 잠금 설정
+// ==========================================
 const ADMIN_PASSWORD = "0000";
 const ADMIN_SESSION_KEY = "tington_admin_unlocked";
 
@@ -549,7 +600,36 @@ function adminLogout(){
   showAdminLogin();
 }
 
+// ==========================================
+// 5. 실시간 리스너 및 로드 로직
+// ==========================================
 function load(){
+  // Firebase Realtime DB 구독 시작
+  db.ref("badminton_v1").on("value", (snapshot) => {
+    const val = snapshot.val();
+    if(val){
+      players = val.players || [];
+      courts = val.courts && val.courts.length ? val.courts : initCourts(2);
+      overlap = val.overlap || {};
+      members = val.members || [];
+      waitingGroups = val.waitingGroups || [];
+
+      nextId = players.reduce((m,p)=>Math.max(m,p.id),0)+1;
+      memberNextId = members.reduce((m,x)=>Math.max(m,x.id),0)+1;
+      groupNextId = waitingGroups.reduce((m,x)=>Math.max(m,x.id),0)+1;
+    } else {
+      // DB에 데이터가 비어있을 시 초기화 후 한번 저장
+      save();
+    }
+    loaded = true;
+    render();
+  }, (err) => {
+    console.error("Firebase 로드 실패, 로컬 데이터를 불러옵니다:", err);
+    loadLocalFallback();
+  });
+}
+
+function loadLocalFallback(){
  try{
   const d=JSON.parse(localStorage.getItem("badminton_v1")||"null");
   if(d){players=d.players||[];courts=d.courts?.length?d.courts:initCourts(2);nextId=players.reduce((m,p)=>Math.max(m,p.id),0)+1}
@@ -561,12 +641,16 @@ function load(){
  }catch(e){}
  loaded=true;render();
 }
+
+// 타이머 주기적 업데이트
 setInterval(()=>{
  document.querySelectorAll("[data-court-timer]").forEach(el=>{
   const id=Number(el.dataset.courtTimer),c=courts.find(x=>x.id===id);
   if(c?.startTime)el.textContent=formatElapsed(Date.now()-c.startTime);
  });
 },1000);
+
+// 초기 진입 체크
 if(sessionStorage.getItem(ADMIN_SESSION_KEY)==="1"){
   document.getElementById("adminLock")?.classList.add("hidden");
   document.getElementById("adminLogoutBtn").style.display="block";
