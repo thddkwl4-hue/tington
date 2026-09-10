@@ -94,8 +94,24 @@ button{cursor:pointer}
 .tierBadgeSm{margin-left:6px;font-size:10.5px;font-weight:700;font-family:'IBM Plex Mono',monospace}
 .guestTag{font-size:10.5px;font-weight:600;color:#9A6B3B;background:#FBEFDF;border-radius:6px;padding:2px 7px}
 .guestTagSm{margin-left:6px;font-size:10px;font-weight:600;color:#9A6B3B}
+.importBar{background:#F1F8F4;border:1px solid #D8ECE0;border-radius:12px;padding:12px 14px;margin-bottom:16px}
+.importBarLabel{font-size:12.5px;font-weight:700;color:#1B5E45;display:flex;align-items:center;gap:6px;margin-bottom:8px}
+.importBarDone{font-size:12px;color:#7C8B84}
+.importChips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+.importChip{border:1px solid #D8ECE0;background:#fff;border-radius:999px;padding:5px 11px;font-size:12px;font-weight:600}
+.importAllBtn{border:none;background:#1B5E45;color:#fff;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:600}
+.addTodayBtn{border:1px solid #1B5E45;background:transparent;color:#1B5E45;border-radius:7px;padding:4px 10px;font-size:11.5px;font-weight:600}
+.groupsSection{margin-top:18px;background:#fff;border:1px solid #E1E7E2;border-radius:14px;padding:16px}
+.groupsSectionHead{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;flex-wrap:wrap;gap:8px}
+.groupBuilderBox{background:#FAFBF9;border:1px dashed #E1E7E2;border-radius:10px;padding:12px;margin:10px 0}
+.groupBuilderSlots{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:6px;margin-bottom:10px}
+.groupsGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin-top:10px}
+.groupCard{border:1px solid #E1E7E2;border-radius:10px;padding:12px;background:#FAFBF9}
+.groupCardNames{font-size:13px;font-weight:600;margin-bottom:8px}
+.groupCardActions{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.groupAssignBtn{border:1px solid #1B5E45;background:transparent;color:#1B5E45;border-radius:7px;padding:5px 10px;font-size:11.5px;font-weight:600}
 .badge{padding:3px 9px;border-radius:999px;font-size:11px;font-weight:600}
-.badge.waiting{background:#E7F3EC;color:#1B5E45}.badge.playing{background:#FCEEE6;color:#C2683B}.badge.resting{background:#EEF0EE;color:#7C8B84}.badge.queued{background:#FDF3E0;color:#B08900}
+.badge.waiting{background:#E7F3EC;color:#1B5E45}.badge.playing{background:#FCEEE6;color:#C2683B}.badge.resting{background:#EEF0EE;color:#7C8B84}.badge.queued{background:#FDF3E0;color:#B08900}.badge.grouped{background:#E9EEFC;color:#3B5FCC}
 .actionCell{flex:1;display:flex;gap:6px;justify-content:flex-end}
 .iconBtn{border:1px solid #E1E7E2;background:#fff;border-radius:7px;width:28px;height:28px;display:flex;align-items:center;justify-content:center;color:#7C8B84}
 .iconBtnDanger{border:1px solid #F0D8D3;background:#FDF3F1;border-radius:7px;width:28px;height:28px;display:flex;align-items:center;justify-content:center;color:#C24A3B}
@@ -156,11 +172,13 @@ const GREEN="#1B5E45", GREEN_DARK="#123B2D", AMBER="#E8A33D", INK="#16231F", MUT
 const TIER_OPTIONS=["S","A","B","C","D","초심","왕초심"];
 const TIER_COLOR={S:"#C24A3B",A:"#C2683B",B:"#B08900",C:"#1B5E45",D:"#3B6FA0","초심":"#7C8B84","왕초심":"#9A8B7C"};
 const GENDER_COLOR={M:"#8B5CF6",F:"#D4A017"};
-const STATUS_LABEL={waiting:"대기 중",resting:"쉬는 중",playing:"경기 중",queued:"다음 대기"};
+const STATUS_LABEL={waiting:"대기 중",resting:"쉬는 중",playing:"경기 중",queued:"다음 대기",grouped:"대기조"};
 
 let players=[], courts=initCourts(2), overlap={}, tab="courts", overlapView="summary";
-let newName="", newTier="B", newGender="M", isGuest=false, guestOf="", assigningCourtId=null;
-let nextId=1, loaded=false;
+let newName="", newTier="B", newGender="M", isGuest=false, guestOf="", assigningCourtId=null, saveToRoster=true;
+let members=[], newMemberName="", newMemberTier="B", newMemberGender="M";
+let waitingGroups=[], isBuildingGroup=false, buildingGroupSelection=[];
+let nextId=1, memberNextId=1, groupNextId=1, loaded=false;
 
 function pairKey(a,b){return a<b?`${a}_${b}`:`${b}_${a}`}
 function combinations(arr,k){
@@ -173,7 +191,7 @@ function combinations(arr,k){
 }
 function formatElapsed(ms){const total=Math.max(0,Math.floor(ms/1000));const m=Math.floor(total/60),s=total%60;return `${m}:${String(s).padStart(2,"0")}`}
 function initCourts(n){return Array.from({length:n},(_,i)=>({id:i+1,playerIds:[],startTime:null,gameCount:0,nextPlayerIds:[]}))}
-function save(){if(!loaded)return;localStorage.setItem("badminton_v1",JSON.stringify({players,courts}));localStorage.setItem("badminton_v1_overlap",JSON.stringify(overlap))}
+function save(){if(!loaded)return;localStorage.setItem("badminton_v1",JSON.stringify({players,courts}));localStorage.setItem("badminton_v1_overlap",JSON.stringify(overlap));localStorage.setItem("badminton_v1_members",JSON.stringify(members));localStorage.setItem("badminton_v1_groups",JSON.stringify(waitingGroups))}
 function esc(s){return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]))}
 function player(id){return players.find(p=>p.id===id)}
 function genderColor(p){return p&&GENDER_COLOR[p.gender]||INK}
@@ -184,10 +202,36 @@ function icon(name,size=14){return `<i data-lucide="${name}" width="${size}" hei
 function addPlayer(){
  const name=newName.trim(); if(!name)return;
  if(isGuest&&!guestOf){alert("게스트를 데려온 회원을 선택해주세요.");return}
- const p={id:nextId++,name,tier:newTier,gender:newGender,guestOf:isGuest?guestOf:null,games:0,status:"waiting",courtId:null,waitSince:Date.now()};
+ let memberId=null;
+ if(saveToRoster&&!isGuest){
+  const existing=members.find(m=>m.name===name);
+  if(existing){memberId=existing.id}
+  else{const m={id:memberNextId++,name,tier:newTier,gender:newGender};members.push(m);memberId=m.id}
+ }
+ const p={id:nextId++,name,tier:newTier,gender:newGender,guestOf:isGuest?guestOf:null,memberId,games:0,status:"waiting",courtId:null,waitSince:Date.now()};
  players.push(p);newName="";isGuest=false;guestOf="";save();render();
 }
 function removePlayer(id){players=players.filter(p=>p.id!==id);save();render()}
+function addMember(){
+ const name=newMemberName.trim(); if(!name)return;
+ members.push({id:memberNextId++,name,tier:newMemberTier,gender:newMemberGender});
+ newMemberName="";save();render();
+}
+function removeMember(id){members=members.filter(m=>m.id!==id);save();render()}
+function addMemberToday(memberId){
+ const m=members.find(x=>x.id===memberId);
+ if(!m||players.some(p=>p.memberId===memberId))return;
+ players.push({id:nextId++,name:m.name,tier:m.tier,gender:m.gender,guestOf:null,memberId:m.id,games:0,status:"waiting",courtId:null,waitSince:Date.now()});
+ save();render();
+}
+function addAllMembersToday(){
+ members.forEach(m=>{
+  if(!players.some(p=>p.memberId===m.id)){
+   players.push({id:nextId++,name:m.name,tier:m.tier,gender:m.gender,guestOf:null,memberId:m.id,games:0,status:"waiting",courtId:null,waitSince:Date.now()});
+  }
+ });
+ save();render();
+}
 function toggleRest(id){
  players=players.map(p=>p.id!==id?p:(p.status==="waiting"?{...p,status:"resting"}:p.status==="resting"?{...p,status:"waiting",waitSince:Date.now()}:p));
  save();render();
@@ -224,7 +268,7 @@ function autoMatch(courtId){
  }
  finalizeAssignment(courtId,best);
 }
-function beginAssign(id){assigningCourtId=id;render()}
+function beginAssign(id){isBuildingGroup=false;assigningCourtId=id;render()}
 function addToCourt(courtId,playerId){
  const court=courts.find(c=>c.id===courtId);
  if(!court)return;
@@ -295,6 +339,46 @@ function endGame(courtId){
  }
  save();render();
 }
+function beginBuildGroup(){assigningCourtId=null;isBuildingGroup=true;buildingGroupSelection=[];render()}
+function addToGroupBuilder(playerId){
+ if(buildingGroupSelection.includes(playerId)||buildingGroupSelection.length>=4)return;
+ buildingGroupSelection=[...buildingGroupSelection,playerId];
+ players=players.map(p=>p.id===playerId?{...p,status:"grouped"}:p);
+ if(buildingGroupSelection.length===4){
+  waitingGroups.push({id:groupNextId++,playerIds:buildingGroupSelection});
+  buildingGroupSelection=[];isBuildingGroup=false;
+ }
+ save();render();
+}
+function removeFromGroupBuilder(playerId){
+ buildingGroupSelection=buildingGroupSelection.filter(id=>id!==playerId);
+ players=players.map(p=>p.id===playerId?{...p,status:"waiting",waitSince:Date.now()}:p);
+ save();render();
+}
+function cancelBuildGroup(){
+ players=players.map(p=>buildingGroupSelection.includes(p.id)?{...p,status:"waiting",waitSince:Date.now()}:p);
+ buildingGroupSelection=[];isBuildingGroup=false;save();render();
+}
+function disbandGroup(groupId){
+ const g=waitingGroups.find(x=>x.id===groupId); if(!g)return;
+ players=players.map(p=>g.playerIds.includes(p.id)?{...p,status:"waiting",courtId:null,waitSince:Date.now()}:p);
+ waitingGroups=waitingGroups.filter(x=>x.id!==groupId);
+ save();render();
+}
+function courtAcceptsGroup(c){return c.playerIds.length===0||(c.playerIds.length===4&&(!c.nextPlayerIds||c.nextPlayerIds.length===0))}
+function assignGroupToCourt(groupId,courtId){
+ const g=waitingGroups.find(x=>x.id===groupId),court=courts.find(c=>c.id===courtId);
+ if(!g||!court||!courtAcceptsGroup(court))return;
+ if(court.playerIds.length===0){
+  courts=courts.map(c=>c.id===courtId?{...c,playerIds:g.playerIds,startTime:Date.now()}:c);
+  players=players.map(p=>g.playerIds.includes(p.id)?{...p,status:"playing",courtId}:p);
+ }else{
+  courts=courts.map(c=>c.id===courtId?{...c,nextPlayerIds:g.playerIds}:c);
+  players=players.map(p=>g.playerIds.includes(p.id)?{...p,status:"queued",courtId}:p);
+ }
+ waitingGroups=waitingGroups.filter(x=>x.id!==groupId);
+ save();render();
+}
 function getOverlap(a,b){return overlap[pairKey(a,b)]||0}
 function waitingPlayers(){return players.filter(p=>p.status==="waiting").sort((a,b)=>a.waitSince-b.waitSince)}
 function overlapRanking(){
@@ -322,17 +406,36 @@ function render(){
   <div class="tabRow">
    <button class="tabBtn ${tab==="courts"?"active":""}" onclick="tab='courts';render()">${icon("trophy",15)} 코트 현황</button>
    <button class="tabBtn ${tab==="players"?"active":""}" onclick="tab='players';render()">${icon("users",15)} 선수 명단</button>
+   <button class="tabBtn ${tab==="members"?"active":""}" onclick="tab='members';render()">${icon("book-user",15)} 회원 명단</button>
    <button class="tabBtn ${tab==="stats"?"active":""}" onclick="tab='stats';render()">${icon("clock",15)} 기록</button>
   </div>
-  ${tab==="courts"?renderCourts(wait):tab==="players"?renderPlayers():renderStats()}
+  ${tab==="courts"?renderCourts(wait):tab==="players"?renderPlayers():tab==="members"?renderMembers():renderStats()}
  </div>`;
  lucide.createIcons();
 }
 function renderCourts(wait){
  return `<div class="courtsLayout"><div class="courtsGrid">${courts.map(c=>renderCourt(c)).join("")}</div>
  <div class="sidebar"><div class="sideCard"><div class="sideTitle">대기 중 <span class="sideCount">${wait.length}</span></div>
- ${assigningCourtId!=null?`<div class="assignBanner">${(courts.find(x=>x.id===assigningCourtId)?.playerIds.length===4)?`코트 ${assigningCourtId} 다음 게임 예약 중`:`코트 ${assigningCourtId}에 배정 중`} · 선수를 클릭하세요 <button class="smallLinkBtn" onclick="cancelAssign(${assigningCourtId})">취소</button></div>`:""}
- <div class="sideList bcm-scroll">${wait.length===0?'<div class="emptyNote">대기 중인 선수가 없어요.</div>':wait.map(p=>`<div class="sideRow ${assigningCourtId!=null?"clickable":""}" onclick="${assigningCourtId!=null?`addToCourt(${assigningCourtId},${p.id})`:""}"><span><span style="color:${genderColor(p)};font-weight:600">${esc(p.name)}</span>${tierBadge(p,true)}${p.guestOf?`<span class="guestTagSm">${esc(p.guestOf)} 게스트</span>`:""}</span><span class="sideGames">${p.games}경기</span></div>`).join("")}</div></div></div></div>`
+ ${isBuildingGroup?`<div class="assignBanner">대기조 만드는 중 (${buildingGroupSelection.length}/4) · 선수를 클릭하세요 <button class="smallLinkBtn" onclick="cancelBuildGroup()">취소</button></div>`:assigningCourtId!=null?`<div class="assignBanner">${(courts.find(x=>x.id===assigningCourtId)?.playerIds.length===4)?`코트 ${assigningCourtId} 다음 게임 예약 중`:`코트 ${assigningCourtId}에 배정 중`} · 선수를 클릭하세요 <button class="smallLinkBtn" onclick="cancelAssign(${assigningCourtId})">취소</button></div>`:""}
+ <div class="sideList bcm-scroll">${wait.length===0?'<div class="emptyNote">대기 중인 선수가 없어요.</div>':wait.map(p=>`<div class="sideRow ${(assigningCourtId!=null||isBuildingGroup)?"clickable":""}" onclick="${isBuildingGroup?`addToGroupBuilder(${p.id})`:assigningCourtId!=null?`addToCourt(${assigningCourtId},${p.id})`:""}"><span><span style="color:${genderColor(p)};font-weight:600">${esc(p.name)}</span>${tierBadge(p,true)}${p.guestOf?`<span class="guestTagSm">${esc(p.guestOf)} 게스트</span>`:""}</span><span class="sideGames">${p.games}경기</span></div>`).join("")}</div></div></div></div>
+ ${renderGroupsSection()}`
+}
+function renderGroupsSection(){
+ const builderBox=isBuildingGroup?`<div class="groupBuilderBox"><div class="pickHint">대기 명단에서 클릭해서 4명을 담아주세요 (${buildingGroupSelection.length}/4)</div>
+  <div class="groupBuilderSlots">${[0,1,2,3].map(i=>{const p=buildingGroupSelection[i]?player(buildingGroupSelection[i]):null;return `<div class="nextSlot ${p?"filled":""}">${p?`<span style="color:${genderColor(p)}">${esc(p.name)}</span><button class="slotRemoveBtn" onclick="removeFromGroupBuilder(${p.id})">${icon("x",11)}</button>`:"<span style='opacity:.4'>비어있음</span>"}</div>`}).join("")}</div>
+  <button class="cancelBtn" onclick="cancelBuildGroup()">취소</button></div>`:"";
+ const cards=waitingGroups.map(g=>{
+  const gps=g.playerIds.map(player);
+  const targets=courts.filter(courtAcceptsGroup);
+  return `<div class="groupCard"><div class="groupCardNames">${gps.map(p=>`<span style="color:${genderColor(p)};font-weight:600">${esc(p?.name)}</span>`).join(" · ")}</div>
+  <div class="groupCardActions">${targets.length===0?'<span class="emptyNote" style="padding:0">지금 배정 가능한 코트가 없어요</span>':targets.map(c=>`<button class="groupAssignBtn" onclick="assignGroupToCourt(${g.id},${c.id})">코트 ${c.id}${c.playerIds.length===4?" (다음)":""}</button>`).join("")}
+  <button class="iconBtnDanger" onclick="disbandGroup(${g.id})" title="대기조 해체">${icon("x",14)}</button></div></div>`;
+ }).join("");
+ return `<div class="groupsSection"><div class="groupsSectionHead"><div class="statsTitle" style="margin:0">대기 명단 (사전 조편성)</div>${isBuildingGroup?"":`<button class="manualBtn" onclick="beginBuildGroup()">＋ 대기조 만들기</button>`}</div>
+ <div class="overlapNote">코트와 상관없이 미리 4명씩 팀을 짜두고, 빈 코트가 생기면 바로 넣을 수 있어요.</div>
+ ${builderBox}
+ ${waitingGroups.length===0&&!isBuildingGroup?'<div class="emptyNote">만들어둔 대기조가 없어요.</div>':`<div class="groupsGrid">${cards}</div>`}
+ </div>`
 }
 function renderCourt(c){
  const inGame=c.playerIds.length===4,isAssigning=assigningCourtId===c.id,cps=c.playerIds.map(player);
@@ -367,13 +470,30 @@ function renderCourt(c){
 }
 function playerLine(p){return `<span style="color:${genderColor(p)}">${esc(p?.name)}</span>(${esc(p?.tier)})${p?.guestOf?" 🏸":""}`}
 function renderPlayers(){
- return `<div class="playersWrap"><div class="addRow"><input id="nameInput" class="input" placeholder="선수 이름 입력" value="${esc(newName)}" oninput="newName=this.value" onkeydown="if(event.key==='Enter'&&!event.isComposing){event.preventDefault();addPlayer()}">
+ const notYet=members.filter(m=>!players.some(p=>p.memberId===m.id));
+ return `<div class="playersWrap">
+ ${members.length?`<div class="importBar"><span class="importBarLabel">${icon("book-user",14)} 회원 명단에서 추가</span>
+  ${notYet.length===0?'<span class="importBarDone">오늘 참석한 회원을 이미 다 추가했어요.</span>':`<div class="importChips">${notYet.map(m=>`<button class="importChip" onclick="addMemberToday(${m.id})" style="color:${genderColor(m)}">＋ ${esc(m.name)}</button>`).join("")}</div><button class="importAllBtn" onclick="addAllMembersToday()">전원 추가</button>`}
+  </div>`:""}
+ <div class="addRow"><input id="nameInput" class="input" placeholder="선수 이름 입력" value="${esc(newName)}" oninput="newName=this.value" onkeydown="if(event.key==='Enter'&&!event.isComposing){event.preventDefault();addPlayer()}">
  <div class="genderToggle"><button class="genderBtn m ${newGender==="M"?"active":""}" onclick="newGender='M';render()">남</button><button class="genderBtn f ${newGender==="F"?"active":""}" onclick="newGender='F';render()">여</button></div>
  <select class="tierSelect" onchange="newTier=this.value">${TIER_OPTIONS.map(t=>`<option ${newTier===t?"selected":""}>${t}</option>`).join("")}</select><button class="addBtn" onclick="addPlayer()">${icon("plus",15)} 추가</button></div>
  <div class="guestRow"><label class="guestCheckLabel"><input type="checkbox" ${isGuest?"checked":""} onchange="isGuest=this.checked;if(!isGuest)guestOf='';render()"> 게스트로 등록</label>
- ${isGuest?`<select class="guestSelect" onchange="guestOf=this.value"><option value="">누구의 게스트인가요?</option>${players.filter(p=>!p.guestOf).map(p=>`<option value="${esc(p.name)}" ${guestOf===p.name?"selected":""}>${esc(p.name)}</option>`).join("")}</select>`:""}</div>
+ ${isGuest?`<select class="guestSelect" onchange="guestOf=this.value"><option value="">누구의 게스트인가요?</option>${players.filter(p=>!p.guestOf).map(p=>`<option value="${esc(p.name)}" ${guestOf===p.name?"selected":""}>${esc(p.name)}</option>`).join("")}</select>`:`<label class="guestCheckLabel"><input type="checkbox" ${saveToRoster?"checked":""} onchange="saveToRoster=this.checked"> 회원 명단에도 저장</label>`}</div>
  <div class="playerTable"><div class="playerTableHead"><span style="flex:2">이름</span><span class="flex1">상태</span><span class="flex1">경기 수</span><span class="flex1"></span></div>
- ${players.length===0?'<div class="emptyNote">등록된 선수가 없어요. 위에서 추가해보세요.</div>':players.map(p=>`<div class="playerRow"><span class="playerNameCell"><span style="color:${genderColor(p)}">${esc(p.name)}</span><span class="tierBadge" style="background:${(TIER_COLOR[p.tier]||MUTED)}1A;color:${TIER_COLOR[p.tier]||MUTED}">${esc(p.tier||"-")}</span>${p.guestOf?`<span class="guestTag">${esc(p.guestOf)} 게스트</span>`:""}</span><span class="flex1">${statusBadge(p.status)}</span><span class="flex1" style="font-family:'IBM Plex Mono',monospace">${p.games}</span><span class="actionCell">${p.status!=="playing"&&p.status!=="queued"?`<button class="iconBtn" onclick="toggleRest(${p.id})" title="쉬기/복귀">${icon("coffee",14)}</button><button class="iconBtnDanger" onclick="removePlayer(${p.id})" title="삭제">${icon("x",14)}</button>`:""}</span></div>`).join("")}</div></div>`
+ ${players.length===0?'<div class="emptyNote">등록된 선수가 없어요. 위에서 추가해보세요.</div>':players.map(p=>`<div class="playerRow"><span class="playerNameCell"><span style="color:${genderColor(p)}">${esc(p.name)}</span><span class="tierBadge" style="background:${(TIER_COLOR[p.tier]||MUTED)}1A;color:${TIER_COLOR[p.tier]||MUTED}">${esc(p.tier||"-")}</span>${p.guestOf?`<span class="guestTag">${esc(p.guestOf)} 게스트</span>`:""}</span><span class="flex1">${statusBadge(p.status)}</span><span class="flex1" style="font-family:'IBM Plex Mono',monospace">${p.games}</span><span class="actionCell">${p.status!=="playing"&&p.status!=="queued"&&p.status!=="grouped"?`<button class="iconBtn" onclick="toggleRest(${p.id})" title="쉬기/복귀">${icon("coffee",14)}</button><button class="iconBtnDanger" onclick="removePlayer(${p.id})" title="삭제">${icon("x",14)}</button>`:""}</span></div>`).join("")}</div></div>`
+}
+function renderMembers(){
+ return `<div class="playersWrap">
+ <div class="addRow"><input id="memberNameInput" class="input" placeholder="회원 이름 입력" value="${esc(newMemberName)}" oninput="newMemberName=this.value" onkeydown="if(event.key==='Enter'&&!event.isComposing){event.preventDefault();addMember()}">
+ <div class="genderToggle"><button class="genderBtn m ${newMemberGender==="M"?"active":""}" onclick="newMemberGender='M';render()">남</button><button class="genderBtn f ${newMemberGender==="F"?"active":""}" onclick="newMemberGender='F';render()">여</button></div>
+ <select class="tierSelect" onchange="newMemberTier=this.value">${TIER_OPTIONS.map(t=>`<option ${newMemberTier===t?"selected":""}>${t}</option>`).join("")}</select><button class="addBtn" onclick="addMember()">${icon("plus",15)} 추가</button></div>
+ <div class="overlapNote">여기 등록해두면 매번 이름을 새로 안 치고, "선수 명단" 탭에서 클릭 한 번으로 오늘 참석자에 추가할 수 있어요.</div>
+ <div class="playerTable"><div class="playerTableHead"><span style="flex:2">이름</span><span class="flex1">오늘 참석</span><span class="flex1"></span></div>
+ ${members.length===0?'<div class="emptyNote">등록된 회원이 없어요. 위에서 추가해보세요.</div>':members.map(m=>{
+  const today=players.some(p=>p.memberId===m.id);
+  return `<div class="playerRow"><span class="playerNameCell"><span style="color:${genderColor(m)}">${esc(m.name)}</span><span class="tierBadge" style="background:${(TIER_COLOR[m.tier]||MUTED)}1A;color:${TIER_COLOR[m.tier]||MUTED}">${esc(m.tier||"-")}</span></span><span class="flex1">${today?`<span class="badge waiting">참석함</span>`:`<button class="addTodayBtn" onclick="addMemberToday(${m.id})">＋ 오늘 추가</button>`}</span><span class="actionCell"><button class="iconBtnDanger" onclick="removeMember(${m.id})" title="회원 명단에서 삭제">${icon("x",14)}</button></span></div>`
+ }).join("")}</div></div>`
 }
 function renderStats(){
  const rank=overlapRanking(),by=overlapByPlayer();
@@ -421,6 +541,10 @@ function load(){
   const d=JSON.parse(localStorage.getItem("badminton_v1")||"null");
   if(d){players=d.players||[];courts=d.courts?.length?d.courts:initCourts(2);nextId=players.reduce((m,p)=>Math.max(m,p.id),0)+1}
   overlap=JSON.parse(localStorage.getItem("badminton_v1_overlap")||"{}")||{};
+  members=JSON.parse(localStorage.getItem("badminton_v1_members")||"[]")||[];
+  memberNextId=members.reduce((m,x)=>Math.max(m,x.id),0)+1;
+  waitingGroups=JSON.parse(localStorage.getItem("badminton_v1_groups")||"[]")||[];
+  groupNextId=waitingGroups.reduce((m,x)=>Math.max(m,x.id),0)+1;
  }catch(e){}
  loaded=true;render();
 }
