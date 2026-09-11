@@ -183,11 +183,51 @@ function combinations(arr,k){
 }
 function formatElapsed(ms){const total=Math.max(0,Math.floor(ms/1000));const m=Math.floor(total/60),s=total%60;return `${m}:${String(s).padStart(2,"0")}`}
 function initCourts(n){return Array.from({length:n},(_,i)=>({id:i+1,playerIds:[],startTime:null,gameCount:0,nextPlayerIds:[]}))}
+function asArray(value){
+ if(Array.isArray(value)) return value;
+ if(value && typeof value === "object") return Object.values(value);
+ return [];
+}
+function normalizeCourts(value){
+ const raw=asArray(value);
+ if(!raw.length) return initCourts(2);
+ return raw.map((c,i)=>({
+  id:Number(c?.id)||i+1,
+  playerIds:asArray(c?.playerIds).map(Number).filter(Number.isFinite),
+  startTime:c?.startTime==null?null:Number(c.startTime)||null,
+  gameCount:Number(c?.gameCount)||0,
+  nextPlayerIds:asArray(c?.nextPlayerIds).map(Number).filter(Number.isFinite)
+ }));
+}
+function normalizePlayers(value){
+ return asArray(value).filter(Boolean).map(p=>({...p,id:Number(p.id),games:Number(p.games)||0,courtId:p.courtId==null?null:Number(p.courtId),status:p.status||"waiting",waitSince:Number(p.waitSince)||Date.now()}));
+}
+function normalizeMembers(value){return asArray(value).filter(Boolean).map(m=>({...m,id:Number(m.id)}));}
+function normalizeGroups(value){return asArray(value).filter(Boolean).map(g=>({...g,id:Number(g.id),playerIds:asArray(g.playerIds).map(Number).filter(Number.isFinite)}));}
+function reconcileCourtState(){
+ const validIds=new Set(players.map(p=>p.id));
+ courts=courts.map(c=>{
+  let ids=c.playerIds.filter(id=>validIds.has(id));
+  const next=c.nextPlayerIds.filter(id=>validIds.has(id));
+  // 저장된 코트 playerIds가 비어 있더라도 선수 데이터에 courtId가 남아 있으면 복구합니다.
+  if(ids.length===0){
+   const fromPlayers=players.filter(p=>p.courtId===c.id && (p.status==="playing"||p.status==="queued")).map(p=>p.id);
+   if(fromPlayers.length) ids=fromPlayers.slice(0,4);
+  }
+  return {...c,playerIds:ids,nextPlayerIds:next};
+ });
+}
+let lastSyncedJSON="";
+const pendingLocalJSONs=new Set();
 async function save(){
  if(!loaded || !window.tingtonFirebase)return;
  const fb=window.tingtonFirebase;
+ const payload={players,courts,overlap,members,waitingGroups};
+ const json=JSON.stringify(payload);
+ lastSyncedJSON=json;
+ pendingLocalJSONs.add(json);
  try{
-  await fb.set(fb.ref(fb.firebaseDB,"badminton_v1"),{players,courts,overlap,members,waitingGroups});
+  await fb.set(fb.ref(fb.firebaseDB,"badminton_v1"),payload);
  }catch(e){
   console.error("Firebase 저장 실패:",e);
  }
@@ -525,25 +565,46 @@ async function load(){
   const snap=await fb.get(gameRef);
   if(snap.exists()){
    const d=snap.val()||{};
-   players=Array.isArray(d.players)?d.players:[];
-   courts=Array.isArray(d.courts)&&d.courts.length?d.courts:initCourts(2);
+   players=normalizePlayers(d.players);
+   courts=normalizeCourts(d.courts);
    overlap=d.overlap||{};
-   members=Array.isArray(d.members)?d.members:[];
-   waitingGroups=Array.isArray(d.waitingGroups)?d.waitingGroups:[];
+   members=normalizeMembers(d.members);
+   waitingGroups=normalizeGroups(d.waitingGroups);
+   reconcileCourtState();
    nextId=players.reduce((m,p)=>Math.max(m,Number(p.id)||0),0)+1;
    memberNextId=members.reduce((m,x)=>Math.max(m,Number(x.id)||0),0)+1;
    groupNextId=waitingGroups.reduce((m,x)=>Math.max(m,Number(x.id)||0),0)+1;
+   lastSyncedJSON=JSON.stringify({players,courts,overlap,members,waitingGroups});
   }
   loaded=true;
   render();
   fb.onValue(gameRef,(snap)=>{
    if(!snap.exists())return;
    const d=snap.val()||{};
-   players=Array.isArray(d.players)?d.players:[];
-   courts=Array.isArray(d.courts)&&d.courts.length?d.courts:initCourts(2);
+   const incomingJSON=JSON.stringify({
+    players:normalizePlayers(d.players),
+    courts:normalizeCourts(d.courts),
+    overlap:d.overlap||{},
+    members:normalizeMembers(d.members),
+    waitingGroups:normalizeGroups(d.waitingGroups)
+   });
+   // 이 브라우저가 방금 Firebase에 저장한 내용이 되돌아온 echo라면
+   // 전체 화면을 다시 그리지 않습니다. 여러 번 빠르게 저장해도
+   // 각 저장값을 따로 기억해서 오래된 echo까지 안전하게 무시합니다.
+   if(pendingLocalJSONs.has(incomingJSON)){
+    pendingLocalJSONs.delete(incomingJSON);
+    lastSyncedJSON=incomingJSON;
+    return;
+   }
+   // 다른 기기에서 실제로 변경된 데이터가 들어온 경우에만 화면을 갱신합니다.
+   if(incomingJSON===lastSyncedJSON)return;
+   lastSyncedJSON=incomingJSON;
+   players=normalizePlayers(d.players);
+   courts=normalizeCourts(d.courts);
    overlap=d.overlap||{};
-   members=Array.isArray(d.members)?d.members:[];
-   waitingGroups=Array.isArray(d.waitingGroups)?d.waitingGroups:[];
+   members=normalizeMembers(d.members);
+   waitingGroups=normalizeGroups(d.waitingGroups);
+   reconcileCourtState();
    nextId=players.reduce((m,p)=>Math.max(m,Number(p.id)||0),0)+1;
    memberNextId=members.reduce((m,x)=>Math.max(m,Number(x.id)||0),0)+1;
    groupNextId=waitingGroups.reduce((m,x)=>Math.max(m,Number(x.id)||0),0)+1;
