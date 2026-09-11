@@ -170,6 +170,7 @@ let newName="", newTier="B", newGender="M", isGuest=false, guestOf="", assigning
 let members=[], newMemberName="", newMemberTier="B", newMemberGender="M";
 let waitingGroups=[], isBuildingGroup=false, buildingGroupSelection=[];
 let nextId=1, memberNextId=1, groupNextId=1, loaded=false;
+let filterMode="all", filterOpen=false;
 
 function pairKey(a,b){return a<b?`${a}_${b}`:`${b}_${a}`}
 function combinations(arr,k){
@@ -392,6 +393,25 @@ function overlapByPlayer(){
  }).filter(r=>r.related.length).sort((a,b)=>b.maxCount-a.maxCount)
 }
 
+function filteredPeople(list){
+  if(filterMode==="all") return list;
+  if(filterMode==="M" || filterMode==="F") return list.filter(p=>p.gender===filterMode);
+  return list.filter(p=>p.tier===filterMode);
+}
+function filterLabel(){
+  if(filterMode==="all") return "전체";
+  if(filterMode==="M") return "남자";
+  if(filterMode==="F") return "여자";
+  return filterMode;
+}
+function renderFilterControls(){
+  const options=[["all","전체"],["M","남자"],["F","여자"],["S","S"],["A","A"],["B","B"],["C","C"],["D","D"],["초심","초심"],["왕초심","왕초심"]];
+  return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+    <button class="manualBtn" onclick="filterOpen=!filterOpen;render()">☷ 정렬${filterMode!=="all"?` · ${esc(filterLabel())}`:""}</button>
+    ${filterOpen?`<div style="display:flex;gap:5px;flex-wrap:wrap">${options.map(([v,l])=>`<button class="${filterMode===v?"autoBtn":"manualBtn"}" style="padding:6px 10px;font-size:11.5px" onclick="filterMode='${v}';filterOpen=false;render()">${l}</button>`).join("")}</div>`:""}
+  </div>`;
+}
+
 function render(){
  const wait=waitingPlayers();
  document.getElementById("app").innerHTML=`
@@ -411,10 +431,11 @@ function render(){
  lucide.createIcons();
 }
 function renderCourts(wait){
+ const shownWait=filteredPeople(wait);
  return `<div class="courtsLayout"><div class="courtsGrid">${courts.map(c=>renderCourt(c)).join("")}</div>
- <div class="sidebar"><div class="sideCard"><div class="sideTitle">대기 중 <span class="sideCount">${wait.length}</span></div>
+ <div class="sidebar"><div class="sideCard"><div class="sideTitle">대기 중 <span class="sideCount">${shownWait.length}</span></div>
  ${isBuildingGroup?`<div class="assignBanner">대기조 만드는 중 (${buildingGroupSelection.length}/4) · 선수를 클릭하세요 <button class="smallLinkBtn" onclick="cancelBuildGroup()">취소</button></div>`:assigningCourtId!=null?`<div class="assignBanner">코트 ${assigningCourtId}에 배정 중 · 선수를 클릭하세요 <button class="smallLinkBtn" onclick="cancelAssign(${assigningCourtId})">취소</button></div>`:""}
- <div class="sideList bcm-scroll">${wait.length===0?'<div class="emptyNote">대기 중인 선수가 없어요.</div>':wait.map(p=>`<div class="sideRow ${(assigningCourtId!=null||isBuildingGroup)?"clickable":""}" onclick="${isBuildingGroup?`addToGroupBuilder(${p.id})`:assigningCourtId!=null?`addToCourt(${assigningCourtId},${p.id})`:""}"><span><span style="color:${genderColor(p)};font-weight:600">${esc(p.name)}</span>${tierBadge(p,true)}${p.guestOf?`<span class="guestTagSm">${esc(p.guestOf)} 게스트</span>`:""}</span><span class="sideGames">${p.games}경기</span></div>`).join("")}</div></div></div></div>
+ ${renderFilterControls()}<div class="sideList bcm-scroll">${shownWait.length===0?'<div class="emptyNote">대기 중인 선수가 없어요.</div>':shownWait.map(p=>`<div class="sideRow ${(assigningCourtId!=null||isBuildingGroup)?"clickable":""}" onclick="${isBuildingGroup?`addToGroupBuilder(${p.id})`:assigningCourtId!=null?`addToCourt(${assigningCourtId},${p.id})`:""}"><span><span style="color:${genderColor(p)};font-weight:600">${esc(p.name)}</span>${tierBadge(p,true)}${p.guestOf?`<span class="guestTagSm">${esc(p.guestOf)} 게스트</span>`:""}</span><span class="sideGames">${p.games}경기</span></div>`).join("")}</div></div></div></div>
  ${renderGroupsSection()}`
 }
 function renderGroupsSection(){
@@ -458,8 +479,10 @@ function renderCourt(c){
 }
 function playerLine(p){return `<span style="color:${genderColor(p)}">${esc(p?.name)}</span>(${esc(p?.tier)})${p?.guestOf?" 🏸":""}`}
 function renderPlayers(){
+ const shownPlayers=filteredPeople(players);
  const notYet=members.filter(m=>!players.some(p=>p.memberId===m.id));
  return `<div class="playersWrap">
+ ${renderFilterControls()}
  ${members.length?`<div class="importBar"><span class="importBarLabel">${icon("book-user",14)} 회원 명단에서 추가</span>
   ${notYet.length===0?'<span class="importBarDone">오늘 참석한 회원을 이미 다 추가했어요.</span>':`<div class="importChips">${notYet.map(m=>`<button class="importChip" onclick="addMemberToday(${m.id})" style="color:${genderColor(m)}">＋ ${esc(m.name)}</button>`).join("")}</div><button class="importAllBtn" onclick="addAllMembersToday()">전원 추가</button>`}
   </div>`:""}
@@ -468,18 +491,20 @@ function renderPlayers(){
  <select class="tierSelect" onchange="newTier=this.value">${TIER_OPTIONS.map(t=>`<option ${newTier===t?"selected":""}>${t}</option>`).join("")}</select><button class="addBtn" onclick="addPlayer()">${icon("plus",15)} 추가</button></div>
  <div class="guestRow"><label class="guestCheckLabel"><input type="checkbox" ${isGuest?"checked":""} onchange="isGuest=this.checked;if(!isGuest)guestOf='';render()"> 게스트로 등록</label>
  ${isGuest?`<select class="guestSelect" onchange="guestOf=this.value"><option value="">누구의 게스트인가요?</option>${players.filter(p=>!p.guestOf).map(p=>`<option value="${esc(p.name)}" ${guestOf===p.name?"selected":""}>${esc(p.name)}</option>`).join("")}</select>`:`<label class="guestCheckLabel"><input type="checkbox" ${saveToRoster?"checked":""} onchange="saveToRoster=this.checked"> 회원 명단에도 저장</label>`}</div>
- <div class="playerToolbar"><span class="playerCount">오늘 참석 ${players.length}명</span>${players.length?`<button class="clearAllBtn" onclick="clearAllPlayers()">${icon("trash-2",13)} 전체 삭제</button>`:""}</div>
+ <div class="playerToolbar"><span class="playerCount">오늘 참석 ${shownPlayers.length}명</span>${players.length?`<button class="clearAllBtn" onclick="clearAllPlayers()">${icon("trash-2",13)} 전체 삭제</button>`:""}</div>
  <div class="playerTable"><div class="playerTableHead"><span style="flex:2">이름</span><span class="flex1">상태</span><span class="flex1">경기 수</span><span class="flex1"></span></div>
- ${players.length===0?'<div class="emptyNote">등록된 선수가 없어요. 위에서 추가해보세요.</div>':players.map(p=>`<div class="playerRow"><span class="playerNameCell"><span style="color:${genderColor(p)}">${esc(p.name)}</span><span class="tierBadge" style="background:${(TIER_COLOR[p.tier]||MUTED)}1A;color:${TIER_COLOR[p.tier]||MUTED}">${esc(p.tier||"-")}</span>${p.guestOf?`<span class="guestTag">${esc(p.guestOf)} 게스트</span>`:""}</span><span class="flex1">${statusBadge(p.status)}</span><span class="flex1" style="font-family:'IBM Plex Mono',monospace">${p.games}</span><span class="actionCell">${p.status!=="playing"&&p.status!=="queued"&&p.status!=="grouped"?`<button class="iconBtn" onclick="toggleRest(${p.id})" title="쉬기/복귀">${icon("coffee",14)}</button><button class="iconBtnDanger" onclick="removePlayer(${p.id})" title="삭제">${icon("x",14)}</button>`:""}</span></div>`).join("")}</div></div>`
+ ${shownPlayers.length===0?'<div class="emptyNote">조건에 맞는 선수가 없어요.</div>':shownPlayers.map(p=>`<div class="playerRow"><span class="playerNameCell"><span style="color:${genderColor(p)}">${esc(p.name)}</span><span class="tierBadge" style="background:${(TIER_COLOR[p.tier]||MUTED)}1A;color:${TIER_COLOR[p.tier]||MUTED}">${esc(p.tier||"-")}</span>${p.guestOf?`<span class="guestTag">${esc(p.guestOf)} 게스트</span>`:""}</span><span class="flex1">${statusBadge(p.status)}</span><span class="flex1" style="font-family:'IBM Plex Mono',monospace">${p.games}</span><span class="actionCell">${p.status!=="playing"&&p.status!=="queued"&&p.status!=="grouped"?`<button class="iconBtn" onclick="toggleRest(${p.id})" title="쉬기/복귀">${icon("coffee",14)}</button><button class="iconBtnDanger" onclick="removePlayer(${p.id})" title="삭제">${icon("x",14)}</button>`:""}</span></div>`).join("")}</div></div>`
 }
 function renderMembers(){
+ const shownMembers=filteredPeople(members);
  return `<div class="playersWrap">
+ ${renderFilterControls()}
  <div class="addRow"><input id="memberNameInput" class="input" placeholder="회원 이름 입력" value="${esc(newMemberName)}" oninput="newMemberName=this.value" onkeydown="if(event.key==='Enter'&&!event.isComposing){event.preventDefault();addMember()}">
  <div class="genderToggle"><button class="genderBtn m ${newMemberGender==="M"?"active":""}" onclick="newMemberGender='M';render()">남</button><button class="genderBtn f ${newMemberGender==="F"?"active":""}" onclick="newMemberGender='F';render()">여</button></div>
  <select class="tierSelect" onchange="newMemberTier=this.value">${TIER_OPTIONS.map(t=>`<option ${newMemberTier===t?"selected":""}>${t}</option>`).join("")}</select><button class="addBtn" onclick="addMember()">${icon("plus",15)} 추가</button></div>
  <div class="overlapNote">여기 등록해두면 매번 이름을 새로 안 치고, "선수 명단" 탭에서 클릭 한 번으로 오늘 참석자에 추가할 수 있어요.</div>
  <div class="playerTable"><div class="playerTableHead"><span style="flex:2">이름</span><span class="flex1">오늘 참석</span><span class="flex1"></span></div>
- ${members.length===0?'<div class="emptyNote">등록된 회원이 없어요. 위에서 추가해보세요.</div>':members.map(m=>{
+ ${shownMembers.length===0?'<div class="emptyNote">조건에 맞는 회원이 없어요.</div>':shownMembers.map(m=>{
   const today=players.some(p=>p.memberId===m.id);
   return `<div class="playerRow"><span class="playerNameCell"><span style="color:${genderColor(m)}">${esc(m.name)}</span><span class="tierBadge" style="background:${(TIER_COLOR[m.tier]||MUTED)}1A;color:${TIER_COLOR[m.tier]||MUTED}">${esc(m.tier||"-")}</span></span><span class="flex1">${today?`<span class="badge waiting">참석함</span>`:`<button class="addTodayBtn" onclick="addMemberToday(${m.id})">＋ 오늘 추가</button>`}</span><span class="actionCell"><button class="iconBtnDanger" onclick="removeMember(${m.id})" title="회원 명단에서 삭제">${icon("x",14)}</button></span></div>`
  }).join("")}</div></div>`
