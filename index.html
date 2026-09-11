@@ -38,9 +38,6 @@ button{cursor:pointer}
 .teamNames{font-weight:600;font-size:14.5px}
 .vsDivider{text-align:center;font-size:10.5px;color:#7C8B84;letter-spacing:1px;margin:2px 0;font-family:'IBM Plex Mono',monospace}
 .endBtn{width:100%;margin-top:12px;background:#C24A3B;color:#fff;border:none;border-radius:9px;padding:9px 0;font-weight:600;font-size:13px}
-.nextBox{margin-top:12px;padding-top:12px;border-top:1px dashed #E1E7E2}
-.nextBoxHint{font-size:11px;color:#7C8B84;margin-bottom:8px;text-align:center}
-.nextSlots{display:flex;flex-direction:column;gap:5px;margin-bottom:9px}
 .nextSlot{border:1px dashed #E1E7E2;border-radius:7px;padding:6px 9px;font-size:12px;color:#7C8B84;text-align:center}
 .nextSlot.filled{border:1px solid #E8A33D;background:#FEF6E9;color:#16231F;font-weight:600;display:flex;align-items:center;justify-content:center;gap:8px}
 .nextPreview{margin-top:12px;padding-top:10px;border-top:1px dashed #E1E7E2;font-size:11.5px;color:#16231F;text-align:center;line-height:1.6}
@@ -159,6 +156,7 @@ const firebaseConfig = {
 const firebaseApp = initializeApp(firebaseConfig);
 const firebaseDB = getDatabase(firebaseApp);
 window.tingtonFirebase = { firebaseDB, ref, get, set, onValue };
+if (typeof window.load === "function") { window.load(); } else { window.addEventListener("DOMContentLoaded", () => window.load && window.load()); }
 </script>
 <script>
 const GREEN="#1B5E45", GREEN_DARK="#123B2D", AMBER="#E8A33D", INK="#16231F", MUTED="#7C8B84";
@@ -281,18 +279,7 @@ function autoMatch(courtId){
 function beginAssign(id){isBuildingGroup=false;assigningCourtId=id;render()}
 function addToCourt(courtId,playerId){
  const court=courts.find(c=>c.id===courtId);
- if(!court)return;
- if(court.playerIds.length===4){
-  const nq=court.nextPlayerIds||[];
-  if(nq.includes(playerId)||nq.length>=4)return;
-  const ids=[...nq,playerId];
-  courts=courts.map(c=>c.id===courtId?{...c,nextPlayerIds:ids}:c);
-  players=players.map(p=>p.id===playerId?{...p,status:"queued",courtId}:p);
-  if(ids.length===4)assigningCourtId=null;
-  save();render();
-  return;
- }
- if(court.playerIds.includes(playerId)||court.playerIds.length>=4)return;
+ if(!court||court.playerIds.length>=4||court.playerIds.includes(playerId))return;
  const ids=[...court.playerIds,playerId],starting=ids.length===4;
  courts=courts.map(c=>c.id===courtId?{...c,playerIds:ids,startTime:starting?Date.now():null}:c);
  players=players.map(p=>p.id===playerId?{...p,status:"playing",courtId}:p);
@@ -426,7 +413,7 @@ function render(){
 function renderCourts(wait){
  return `<div class="courtsLayout"><div class="courtsGrid">${courts.map(c=>renderCourt(c)).join("")}</div>
  <div class="sidebar"><div class="sideCard"><div class="sideTitle">대기 중 <span class="sideCount">${wait.length}</span></div>
- ${isBuildingGroup?`<div class="assignBanner">대기조 만드는 중 (${buildingGroupSelection.length}/4) · 선수를 클릭하세요 <button class="smallLinkBtn" onclick="cancelBuildGroup()">취소</button></div>`:assigningCourtId!=null?`<div class="assignBanner">${(courts.find(x=>x.id===assigningCourtId)?.playerIds.length===4)?`코트 ${assigningCourtId} 다음 게임 예약 중`:`코트 ${assigningCourtId}에 배정 중`} · 선수를 클릭하세요 <button class="smallLinkBtn" onclick="cancelAssign(${assigningCourtId})">취소</button></div>`:""}
+ ${isBuildingGroup?`<div class="assignBanner">대기조 만드는 중 (${buildingGroupSelection.length}/4) · 선수를 클릭하세요 <button class="smallLinkBtn" onclick="cancelBuildGroup()">취소</button></div>`:assigningCourtId!=null?`<div class="assignBanner">코트 ${assigningCourtId}에 배정 중 · 선수를 클릭하세요 <button class="smallLinkBtn" onclick="cancelAssign(${assigningCourtId})">취소</button></div>`:""}
  <div class="sideList bcm-scroll">${wait.length===0?'<div class="emptyNote">대기 중인 선수가 없어요.</div>':wait.map(p=>`<div class="sideRow ${(assigningCourtId!=null||isBuildingGroup)?"clickable":""}" onclick="${isBuildingGroup?`addToGroupBuilder(${p.id})`:assigningCourtId!=null?`addToCourt(${assigningCourtId},${p.id})`:""}"><span><span style="color:${genderColor(p)};font-weight:600">${esc(p.name)}</span>${tierBadge(p,true)}${p.guestOf?`<span class="guestTagSm">${esc(p.guestOf)} 게스트</span>`:""}</span><span class="sideGames">${p.games}경기</span></div>`).join("")}</div></div></div></div>
  ${renderGroupsSection()}`
 }
@@ -451,17 +438,8 @@ function renderCourt(c){
  const inGame=c.playerIds.length===4,isAssigning=assigningCourtId===c.id,cps=c.playerIds.map(player);
  if(inGame){
   const nq=c.nextPlayerIds||[];
-  let nextSection;
-  if(isAssigning){
-   nextSection=`<div class="nextBox"><div class="nextBoxHint">다음 게임 선수를 담아주세요 (${nq.length}/4)</div>
-   <div class="nextSlots">${[0,1,2,3].map(i=>{const p=nq[i]?player(nq[i]):null;return `<div class="nextSlot ${p?"filled":""}">${p?`<span style="color:${genderColor(p)}">${esc(p.name)}</span><button class="slotRemoveBtn" onclick="removeFromCourtPending(${c.id},${p.id})">${icon("x",11)}</button>`:"<span style='opacity:.4'>비어있음</span>"}</div>`}).join("")}</div>
-   <button class="cancelBtn" onclick="cancelAssign(${c.id})">취소</button></div>`;
-  }else if(nq.length>0){
-   nextSection=`<div class="nextPreview"><span class="nextPreviewLabel">다음</span> ${nq.map(id=>{const p=player(id);return `<span style="color:${genderColor(p)}">${esc(p?.name)}</span>`}).join(", ")} <span class="nextPreviewCount">(${nq.length}/4)</span>
-   <div class="nextPreviewActions"><button class="nextEditBtn" onclick="beginAssign(${c.id})">수정</button><button class="nextEditBtn" onclick="cancelAssign(${c.id})">취소</button></div></div>`;
-  }else{
-   nextSection=`<button class="nextReserveBtn" onclick="beginAssign(${c.id})">＋ 다음 선수 예약</button>`;
-  }
+  const nextSection=nq.length>0?`<div class="nextPreview"><span class="nextPreviewLabel">다음</span> ${nq.map(id=>{const p=player(id);return `<span style="color:${genderColor(p)}">${esc(p?.name)}</span>`}).join(", ")} <span class="nextPreviewCount">(${nq.length}/4)</span>
+   <div class="nextPreviewActions"><button class="nextEditBtn" onclick="cancelAssign(${c.id})">예약 취소</button></div></div>`:"";
   return `<div class="courtCard"><div class="courtCardHead"><span class="courtNum">코트 ${c.id}</span></div>
   <div class="timerRow">${icon("clock",14)}<span class="timerText" data-court-timer="${c.id}">${formatElapsed(Date.now()-c.startTime)}</span></div>
   <div class="teamBlock"><div class="teamNames">${playerLine(cps[0])} · ${playerLine(cps[1])}</div></div>
@@ -559,7 +537,21 @@ setInterval(()=>{
   if(c?.startTime)el.textContent=formatElapsed(Date.now()-c.startTime);
  });
 },1000);
-load();
+// firebase 모듈 스크립트가 로드되기 전에도 화면 골격이 바로 보이도록 즉시 한 번 렌더링합니다.
+render();
+// firebase 모듈 스크립트가 초기화를 마치면 window.load()를 직접 호출해 실제 데이터를 불러옵니다.
+// 만약 일정 시간 안에 연결되지 않으면(오프라인/네트워크 차단/잘못된 설정 등) 안내 배너를 보여줍니다.
+setTimeout(()=>{
+ if(!loaded){
+  const app=document.getElementById("app");
+  if(app) app.insertAdjacentHTML("afterbegin", `<div style="max-width:640px;margin:16px auto;padding:14px 16px;background:#FDF3F1;border:1px solid #F0D8D3;border-radius:12px;color:#C24A3B;font-size:13px;line-height:1.6">
+   ⚠️ 저장소(Firebase)에 연결하지 못했어요. 아래를 확인해주세요.<br>
+   1) 인터넷에 연결되어 있는지<br>
+   2) 이 파일을 더블클릭해서 연 게 아니라 웹(Netlify, GitHub Pages 등)에 올려서 접속했는지 — 로컬 파일(file://)로 직접 열면 브라우저 보안 정책 때문에 저장 기능이 동작하지 않아요<br>
+   3) 콘솔(F12)에 다른 에러 메시지가 있는지
+   </div>`);
+ }
+},4000);
 </script>
 </body>
 </html>
