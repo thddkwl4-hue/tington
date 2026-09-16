@@ -69,6 +69,8 @@ button{cursor:pointer}
 .sideRow{display:flex;justify-content:space-between;font-size:12.5px;padding:5px 2px;border-bottom:1px solid #F4F6F3}
 .sideRow.clickable{cursor:pointer}
 .sideGames{color:#7C8B84;font-family:'IBM Plex Mono',monospace;font-size:11px}
+.sideRight{display:flex;flex-direction:column;align-items:flex-end;gap:2px}
+.sideWaitTime{color:#B08900;font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600}
 .emptyNote{font-size:12px;color:#7C8B84;padding:8px 2px}
 .playersWrap{max-width:640px}
 .addRow{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
@@ -408,7 +410,7 @@ function assignGroupToCourt(groupId,courtId){
  save();render();
 }
 function getOverlap(a,b){return overlap[pairKey(a,b)]||0}
-function waitingPlayers(){return players.filter(p=>p.status==="waiting").sort((a,b)=>a.waitSince-b.waitSince)}
+function waitingPlayers(){return players.filter(p=>p.status==="waiting"||p.status==="grouped"||p.status==="queued").sort((a,b)=>a.waitSince-b.waitSince)}
 function overlapRanking(){
  return Object.entries(overlap).map(([key,count])=>{
   const [a,b]=key.split("_").map(Number),pa=player(a),pb=player(b);
@@ -462,7 +464,7 @@ function renderCourts(wait){
  const shownWait=filteredPeople(wait);
  return `<div class="courtsLayout"><div class="courtsGrid">${courts.map(c=>renderCourt(c)).join("")}</div>
  <div class="sidebar"><div class="sideCard"><div class="sideTitle">대기 중 <span class="sideCount">${shownWait.length}</span></div>
- ${renderFilterControls()}<div class="sideList bcm-scroll">${shownWait.length===0?'<div class="emptyNote">대기 중인 선수가 없어요.</div>':shownWait.map(p=>`<div class="sideRow"><span><span style="color:${genderColor(p)};font-weight:600">${esc(p.name)}</span>${tierBadge(p,true)}${p.guestOf?`<span class="guestTagSm">${esc(p.guestOf)} 게스트</span>`:""}</span><span class="sideGames">${p.games}경기</span></div>`).join("")}</div></div></div></div>
+ ${renderFilterControls()}<div class="sideList bcm-scroll">${shownWait.length===0?'<div class="emptyNote">대기 중인 선수가 없어요.</div>':shownWait.map(p=>`<div class="sideRow"><span><span style="color:${genderColor(p)};font-weight:600">${esc(p.name)}</span>${tierBadge(p,true)}${p.guestOf?`<span class="guestTagSm">${esc(p.guestOf)} 게스트</span>`:""}${p.status==="grouped"?'<span class="badge grouped" style="margin-left:6px;padding:1px 7px;font-size:9.5px">대기조</span>':p.status==="queued"?'<span class="badge queued" style="margin-left:6px;padding:1px 7px;font-size:9.5px">다음 대기</span>':""}</span><span class="sideRight"><span class="sideWaitTime" data-wait-timer="${p.id}">${formatElapsed(Date.now()-p.waitSince)}</span><span class="sideGames">${p.games}경기</span></span></div>`).join("")}</div></div></div></div>
  ${renderGroupsSection()}`
 }
 function renderGroupsSection(){
@@ -597,6 +599,10 @@ setInterval(()=>{
  document.querySelectorAll("[data-court-timer]").forEach(el=>{
   const id=Number(el.dataset.courtTimer),c=courts.find(x=>x.id===id);
   if(c?.startTime)el.textContent=formatElapsed(Date.now()-c.startTime);
+ });
+ document.querySelectorAll("[data-wait-timer]").forEach(el=>{
+  const id=Number(el.dataset.waitTimer),p=players.find(x=>x.id===id);
+  if(p?.waitSince)el.textContent=formatElapsed(Date.now()-p.waitSince);
  });
 },1000);
 // firebase 모듈 스크립트가 로드되기 전에도 화면 골격은 바로 그려두되(잠금 화면이 그 위를 덮고 있음),
