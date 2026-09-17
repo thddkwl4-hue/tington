@@ -173,7 +173,12 @@ let newName="", newTier="B", newGender="M", isGuest=false, guestOf="", assigning
 let members=[], newMemberName="", newMemberTier="B", newMemberGender="M";
 let waitingGroups=[], isBuildingGroup=false, buildingGroupSelection=[];
 let nextId=1, memberNextId=1, groupNextId=1, loaded=false;
-let filterMode="all", filterOpen=false;
+let filterMode="all", filterOpen=false, searchQuery="", composingSearch=false, searchDebounceTimer=null;
+function onSearchInput(el){
+  searchQuery=el.value;
+  clearTimeout(searchDebounceTimer);
+  searchDebounceTimer=setTimeout(()=>{ if(!composingSearch) render(); }, 350);
+}
 
 function pairKey(a,b){return a<b?`${a}_${b}`:`${b}_${a}`}
 function combinations(arr,k){
@@ -426,9 +431,20 @@ function overlapByPlayer(){
 }
 
 function filteredPeople(list){
-  if(filterMode==="all") return list;
-  if(filterMode==="M" || filterMode==="F") return list.filter(p=>p.gender===filterMode);
-  return list.filter(p=>p.tier===filterMode);
+  let arr=list;
+  if(searchQuery.trim()){
+    const q=searchQuery.trim().toLowerCase();
+    arr=arr.filter(p=>p.name.toLowerCase().includes(q));
+  }
+  arr=[...arr];
+  if(filterMode==="M"){
+    arr.sort((a,b)=>(a.gender===b.gender?0:(a.gender==="M"?-1:1))||a.name.localeCompare(b.name,"ko"));
+  }else if(filterMode==="F"){
+    arr.sort((a,b)=>(a.gender===b.gender?0:(a.gender==="F"?-1:1))||a.name.localeCompare(b.name,"ko"));
+  }else{
+    arr.sort((a,b)=>a.name.localeCompare(b.name,"ko"));
+  }
+  return arr;
 }
 function filterLabel(){
   if(filterMode==="all") return "전체";
@@ -437,8 +453,9 @@ function filterLabel(){
   return filterMode;
 }
 function renderFilterControls(){
-  const options=[["all","전체"],["M","남자"],["F","여자"],["S","S"],["A","A"],["B","B"],["C","C"],["D","D"],["초심","초심"],["왕초심","왕초심"]];
+  const options=[["all","전체"],["M","남자"],["F","여자"]];
   return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+    <input id="searchInput" class="input" style="flex:1;min-width:120px;padding:7px 10px;font-size:12.5px" placeholder="🔍 이름 검색" value="${esc(searchQuery)}" oncompositionstart="composingSearch=true" oncompositionend="composingSearch=false;onSearchInput(this)" oninput="onSearchInput(this)">
     <button class="manualBtn" onclick="filterOpen=!filterOpen;render()">☷ 정렬${filterMode!=="all"?` · ${esc(filterLabel())}`:""}</button>
     ${filterOpen?`<div style="display:flex;gap:5px;flex-wrap:wrap">${options.map(([v,l])=>`<button class="${filterMode===v?"autoBtn":"manualBtn"}" style="padding:6px 10px;font-size:11.5px" onclick="filterMode='${v}';filterOpen=false;render()">${l}</button>`).join("")}</div>`:""}
   </div>`;
@@ -446,6 +463,10 @@ function renderFilterControls(){
 
 function render(){
  const wait=waitingPlayers();
+ const active=document.activeElement;
+ const activeId=active&&active.id;
+ const selStart=active&&typeof active.selectionStart==="number"?active.selectionStart:null;
+ const selEnd=active&&typeof active.selectionEnd==="number"?active.selectionEnd:null;
  document.getElementById("app").innerHTML=`
  <div class="page">
   <div class="header">
@@ -459,6 +480,13 @@ function render(){
   ${tab==="stats"?renderStats():renderCourts(wait)}
  </div>`;
  lucide.createIcons();
+ if(activeId){
+  const el=document.getElementById(activeId);
+  if(el&&typeof el.focus==="function"){
+   el.focus();
+   if(selStart!==null&&el.setSelectionRange){try{el.setSelectionRange(selStart,selEnd)}catch(e){}}
+  }
+ }
 }
 function renderCourts(wait){
  const shownWait=filteredPeople(wait);
