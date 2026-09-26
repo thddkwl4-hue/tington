@@ -234,6 +234,7 @@ let historyMonth=new Date(new Date().getFullYear(),new Date().getMonth(),1);
 let selectedHistoryDate=dateKey(new Date());
 let filterMode="all", filterOpen=false, searchQuery="", composingSearch=false, searchDebounceTimer=null;
 let memberFilterMode="all", memberFilterOpen=false;
+let participationSearchQuery="";
 function onSearchInput(el){
   searchQuery=el.value;
   clearTimeout(searchDebounceTimer);
@@ -700,12 +701,32 @@ function renderHistoryCalendar(){
  const list=selectedGames.length?selectedGames.map(g=>`<div class="historyGameRow"><span class="historyGameNo">${g.gameNo}번 게임</span><span class="historyGameNames">${g.playerNames.map((n,i)=>`<span style="color:${genderColor(player(g.playerIds?.[i]))};font-weight:600">${esc(n)}</span>`).join(' · ')}</span></div>`).join(''):'<div class="emptyNote">이 날짜에 완료된 게임 기록이 없어요.</div>';
  return `<div class="calendarCard"><div class="calendarHead"><div class="calendarTitle">게임 기록 캘린더</div><div class="calendarNav"><button class="calendarNavBtn" onclick="changeHistoryMonth(-1)">‹</button><button class="calendarNavBtn" onclick="historyMonth=new Date(new Date().getFullYear(),new Date().getMonth(),1);selectedHistoryDate=dateKey();render()">오늘</button><button class="calendarNavBtn" onclick="changeHistoryMonth(1)">›</button></div></div><div class="calendarTitle" style="font-size:13px;margin-bottom:9px">${formatMonthTitle(historyMonth)}</div><div class="calendarGrid">${['일','월','화','수','목','금','토'].map(x=>`<div class="calendarWeekday">${x}</div>`).join('')}${cells.join('')}</div><div class="historyList"><div class="historyDateTitle">${formatDateKR(selectedHistoryDate)} 게임 기록</div>${list}</div></div>`;
 }
-function renderParticipationCard(){
- const rows=[...members].sort((a,b)=>{
+function participationRowsHtml(){
+ const query=(participationSearchQuery||"").trim().toLowerCase();
+ const rows=[...members].filter(m=>!query||(m.name||"").toLowerCase().includes(query)).sort((a,b)=>{
   const da=daysSinceDate(a.lastPlayedAt||a.createdAt),db=daysSinceDate(b.lastPlayedAt||b.createdAt);
   return (db??-1)-(da??-1);
  });
- return `<div class="participationCard"><div class="statsTitle">회원 참여 현황</div><div class="overlapNote">마지막 게임 참여일 기준으로 계산합니다. 처음 등록한 회원은 등록일부터 계산하고, 기존 회원은 기준일 이후부터 계산합니다. 20일 이상 미참여하면 주의 표시가 떠요.</div><div class="participationList">${rows.length?rows.map(m=>{const baseDate=m.lastPlayedAt||m.createdAt,days=daysSinceDate(baseDate),warn=days!==null&&days>=20;return `<div class="participationRow"><div class="participationName"><span style="color:${genderColor(m)}">${esc(m.name)}</span><span class="tierBadgeSm">${esc(m.tier||'-')}</span></div><div class="participationInfo">${days===null?`<div>등록일 없음</div>`:`<div class="participationDays ${warn?'warn':''}">${days}일째 미참여${warn?' ⚠':''}</div><div class="participationLast">${m.lastPlayedAt?`마지막 참여 ${formatDateKR(m.lastPlayedAt)}`:`회원 등록 ${formatDateKR(m.createdAt)}`}</div>${warn?'<div class="participationWarn">20일 이상 미참여 주의</div>':''}`}</div></div>`}).join(''):'<div class="emptyNote">등록된 회원이 없어요.</div>'}</div></div>`;
+ return rows.length?rows.map(m=>{
+  const baseDate=m.lastPlayedAt||m.createdAt,days=daysSinceDate(baseDate),warn=days!==null&&days>=20;
+  return `<div class="participationRow"><div class="participationName"><span style="color:${genderColor(m)}">${esc(m.name)}</span><span class="tierBadgeSm">${esc(m.tier||'-')}</span></div><div class="participationInfo">${days===null?`<div>등록일 없음</div>`:`<div class="participationDays ${warn?'warn':''}">${days}일째 미참여${warn?' ⚠':''}</div><div class="participationLast">${m.lastPlayedAt?`마지막 참여 ${formatDateKR(m.lastPlayedAt)}`:`회원 등록 ${formatDateKR(m.createdAt)}`}</div>${warn?'<div class="participationWarn">20일 이상 미참여 주의</div>':''}`}</div></div>`;
+ }).join(''):'<div class="emptyNote">검색 결과가 없어요.</div>';
+}
+function updateParticipationSearch(value){
+ participationSearchQuery=value||"";
+ const list=document.getElementById("participationList");
+ if(list) list.innerHTML=participationRowsHtml();
+}
+function renderParticipationCard(){
+ return `<div class="participationCard">
+  <div class="statsTitle">회원 참여 현황</div>
+  <div class="overlapNote">마지막 게임 참여일 기준으로 계산합니다. 처음 등록한 회원은 등록일부터 계산하고, 기존 회원은 기준일 이후부터 계산합니다. 20일 이상 미참여하면 주의 표시가 떠요.</div>
+  <div style="display:flex;gap:8px;align-items:center;margin:0 0 12px 0">
+   <input id="participationSearchInput" class="input" style="flex:1;min-width:0;padding:8px 10px;font-size:12.5px" placeholder="🔍 회원 이름 검색" value="${esc(participationSearchQuery)}" oninput="updateParticipationSearch(this.value)">
+   ${participationSearchQuery?`<button class="manualBtn" onclick="updateParticipationSearch('');document.getElementById('participationSearchInput')?.focus()" style="padding:7px 10px">초기화</button>`:""}
+  </div>
+  <div id="participationList" class="participationList">${participationRowsHtml()}</div>
+ </div>`;
 }
 function renderStats(){
  const rank=overlapRanking(),by=overlapByPlayer();
